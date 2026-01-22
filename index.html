@@ -1,450 +1,248 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <!-- PWA Meta Tags -->
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#10b981">
-<link rel="apple-touch-icon" href="[https://cdn-icons-png.flaticon.com/512/192/192451.png](https://cdn-icons-png.flaticon.com/512/192/192451.png)">
-
-<!-- Service Worker Registration -->
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .then(() => console.log("PWA Ready"))
-        .catch(err => console.log("PWA Failed", err));
-    });
-  }
-</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Health Tracker | Calories & Water</title>
+    
+    <!-- PWA Meta Tags -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#10b981">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/192/192451.png">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
-                    colors: {
-                        water: '#3b82f6',
-                        'water-dark': '#1d4ed8'
-                    }
+                    colors: { water: '#3b82f6', 'water-dark': '#1d4ed8' }
                 }
             }
         }
     </script>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, query, where, onSnapshot, addDoc, serverTimestamp, setLogLevel, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         window.firebase = {
-            initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
-            getFirestore, collection, query, where, onSnapshot, addDoc, serverTimestamp, setLogLevel, limit, orderBy
+            initializeApp, getAuth, signInAnonymously, onAuthStateChanged,
+            getFirestore, collection, onSnapshot, addDoc, serverTimestamp
         };
     </script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; transition: background-color 0.3s ease; }
         .container-box { box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1); }
-        .dark .container-box { box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.3); }
-        .spinner {
-            border: 4px solid rgba(0, 0, 0, 0.1); width: 36px; height: 36px; border-radius: 50%;
-            border-left-color: #2563eb; animation: spin 1s ease infinite;
-        }
+        .spinner { border: 4px solid rgba(0, 0, 0, 0.1); width: 24px; height: 24px; border-radius: 50%; border-left-color: #10b981; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .water-wave {
-            background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%);
-            transition: height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+        .water-wave { background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%); transition: height 0.6s ease; }
     </style>
 </head>
 <body class="bg-slate-50 dark:bg-slate-900 p-4 md:p-8 min-h-screen text-slate-800 dark:text-slate-100">
 
     <div class="max-w-5xl mx-auto space-y-6">
-        
         <header class="flex justify-between items-center">
             <div>
                 <h1 class="text-3xl font-extrabold tracking-tight">HealthDashboard</h1>
                 <p class="text-sm text-slate-500 dark:text-slate-400">AI Powered Personal Wellness</p>
             </div>
-            <button onclick="toggleTheme()" class="p-3 rounded-xl bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 hover:scale-105 transition-transform">
-                <span id="themeToggleIcon">☀️</span>
+            <button onclick="document.documentElement.classList.toggle('dark')" class="p-3 rounded-xl bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700">
+                🌓
             </button>
         </header>
 
-        <!-- Top Stats Row -->
+        <!-- Stats Row -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <!-- Calorie Card -->
             <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl container-box border border-slate-100 dark:border-slate-700">
-                <p class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Calories Today</p>
+                <p class="text-sm font-semibold text-slate-500 uppercase">Calories Today</p>
                 <div class="flex items-baseline gap-2 mt-2">
-                    <span id="dailyTotalCalories" class="text-4xl font-bold text-emerald-600 dark:text-emerald-400">0</span>
-                    <span class="text-slate-400 font-medium text-lg">kcal</span>
+                    <span id="dailyTotalCalories" class="text-4xl font-bold text-emerald-600">0</span>
+                    <span class="text-slate-400 text-lg">kcal</span>
                 </div>
             </div>
 
-            <!-- Water Card -->
             <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl container-box border border-slate-100 dark:border-slate-700 relative overflow-hidden">
                 <div class="relative z-10">
-                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Water Intake</p>
+                    <p class="text-sm font-semibold text-slate-500 uppercase">Water Intake</p>
                     <div class="flex items-baseline gap-2 mt-2">
-                        <span id="dailyWaterTotal" class="text-4xl font-bold text-blue-600 dark:text-blue-400">0</span>
-                        <span class="text-slate-400 font-medium text-lg">/ 2500 ml</span>
+                        <span id="dailyWaterTotal" class="text-4xl font-bold text-blue-600">0</span>
+                        <span class="text-slate-400 text-lg">/ 2500 ml</span>
                     </div>
                 </div>
                 <div id="waterFill" class="absolute bottom-0 left-0 w-full water-wave opacity-10" style="height: 0%"></div>
             </div>
 
-            <!-- Auth Status -->
             <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl container-box border border-slate-100 dark:border-slate-700 flex flex-col justify-center">
                 <div class="flex items-center gap-2 mb-1">
                     <div id="statusIndicator" class="w-2 h-2 rounded-full bg-slate-300"></div>
-                    <span id="authStatus" class="text-xs font-bold text-slate-400 uppercase tracking-widest">Initializing...</span>
+                    <span id="authStatus" class="text-xs font-bold text-slate-400 uppercase">Connecting...</span>
                 </div>
-                <span id="displayUserId" class="text-[10px] font-mono text-slate-400 truncate">...</span>
+                <span id="displayUserId" class="text-[10px] font-mono text-slate-400 truncate">No User</span>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Left: Logging Tools -->
             <div class="lg:col-span-2 space-y-6">
-                <!-- Meal Log -->
+                <!-- Meal Input -->
                 <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl container-box border border-slate-100 dark:border-slate-700">
-                    <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
-                        <span>📸</span> Analyze Meal
-                    </h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="space-y-4">
-                            <input type="text" id="mealNameInput" class="w-full p-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 ring-emerald-500 outline-none transition" placeholder="What did you eat?">
-                            <input type="file" id="imageInput" accept="image/*" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 dark:file:bg-slate-700 dark:file:text-emerald-400 cursor-pointer">
-                            <button id="submitButton" onclick="handleMealAnalysis()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-200 dark:shadow-none disabled:opacity-50">
-                                Analyze & Log
-                            </button>
+                    <h2 class="text-xl font-bold mb-4">📸 Log Meal with AI</h2>
+                    <input type="text" id="mealNameInput" class="w-full p-4 mb-4 bg-slate-50 dark:bg-slate-700 border rounded-xl" placeholder="E.g. Chicken Biryani">
+                    <div class="flex flex-col md:flex-row gap-4">
+                        <input type="file" id="imageInput" accept="image/*" class="flex-1 text-sm text-slate-500">
+                        <button id="submitButton" onclick="handleMealAnalysis()" class="px-8 py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg">Analyze Meal</button>
+                    </div>
+                    <div id="outputContainer" class="hidden mt-4 p-4 bg-slate-50 dark:bg-slate-700 rounded-xl">
+                        <div id="loadingIndicator" class="hidden flex items-center gap-2">
+                            <div class="spinner"></div><span>AI is thinking...</span>
                         </div>
-                        <div id="outputContainer" class="hidden h-full border-l border-slate-100 dark:border-slate-700 pl-4">
-                            <div id="loadingIndicator" class="hidden flex flex-col items-center justify-center py-6 space-y-2">
-                                <div class="spinner"></div>
-                                <span class="text-xs font-bold text-emerald-600">AI ESTIMATING...</span>
-                            </div>
-                            <div id="aiResponse" class="text-sm prose dark:prose-invert max-h-48 overflow-y-auto"></div>
-                        </div>
+                        <div id="aiResponse" class="text-sm"></div>
                     </div>
                 </div>
 
-                <!-- Water Tracker Controls -->
+                <!-- Water Log -->
                 <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl container-box border border-slate-100 dark:border-slate-700">
-                    <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
-                        <span>💧</span> Hydration Tracker
-                    </h2>
-                    <div class="flex flex-wrap gap-3">
-                        <button onclick="logWater(250)" class="flex-1 min-w-[120px] py-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-all flex flex-col items-center">
-                            <span class="text-2xl mb-1">🥛</span>
-                            <span class="font-bold text-blue-700 dark:text-blue-300">+250ml</span>
-                        </button>
-                        <button onclick="logWater(500)" class="flex-1 min-w-[120px] py-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-800/50 transition-all flex flex-col items-center">
-                            <span class="text-2xl mb-1">🏺</span>
-                            <span class="font-bold text-blue-700 dark:text-blue-300">+500ml</span>
-                        </button>
-                        <button onclick="resetWater()" class="px-4 py-4 bg-slate-50 dark:bg-slate-700 rounded-2xl text-slate-400 hover:text-red-500 transition-colors">
-                            <span class="text-xl">🔄</span>
-                        </button>
+                    <h2 class="text-xl font-bold mb-4">💧 Water</h2>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button onclick="logWater(250)" class="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-xl">+250ml</button>
+                        <button onclick="logWater(500)" class="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-xl">+500ml</button>
+                        <button onclick="logWater(750)" class="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-xl">+750ml</button>
+                        <button onclick="logWater(1000)" class="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-xl">+1L</button>
                     </div>
                 </div>
-
-                <!-- Main Chart -->
+                
                 <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl container-box border border-slate-100 dark:border-slate-700">
-                    <h2 class="text-lg font-bold mb-4">Calorie Progress (14 Days)</h2>
-                    <div class="h-64">
-                        <canvas id="monthlyCalorieChart"></canvas>
-                    </div>
+                    <h2 class="text-lg font-bold mb-4">Trends</h2>
+                    <div class="h-48"><canvas id="calorieChart"></canvas></div>
                 </div>
             </div>
 
-            <!-- Right: Activity Feed -->
-            <div class="space-y-6">
-                <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl container-box border border-slate-100 dark:border-slate-700 h-full">
-                    <h2 class="text-xl font-bold mb-4">Daily Feed</h2>
-                    <div id="activityFeed" class="space-y-4 max-h-[800px] overflow-y-auto pr-2 custom-scrollbar">
-                        <p class="text-slate-400 italic text-sm text-center py-10">No activity yet today...</p>
-                    </div>
-                </div>
+            <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl container-box border border-slate-100 dark:border-slate-700">
+                <h2 class="text-xl font-bold mb-4">Recent</h2>
+                <div id="activityFeed" class="space-y-3"></div>
             </div>
+        </div>
+
+        <div class="p-4 bg-black rounded-lg text-emerald-500 font-mono text-[10px] opacity-75">
+            <p>> SYSTEM LOG: <span id="debugLog">Ready...</span></p>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        const apiKey = ""; 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'health-tracker-v2';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        const modelName = 'gemini-2.5-flash-preview-09-2025';
+        // CONFIGURATION
+        const apiKey = "AIzaSyCRNuWwasPuuxXzyUGE_ldUZmf78Y5miPI"; 
+        const firebaseConfig = {
+            apiKey: "AIzaSyBdlf1ufGZNTWxcO9vTDYqGSEz8uBRRaOw",
+            authDomain: "my-health-tracker-6a42c.firebaseapp.com",
+            projectId: "my-health-tracker-6a42c",
+            storageBucket: "my-health-tracker-6a42c.firebasestorage.app",
+            messagingSenderId: "440721276125",
+            appId: "1:440721276125:web:1c3566058a8ba1bef62f34"
+        };
 
-        let db, auth, userId = null;
-        let chartInstance;
-        let isAuthReady = false;
+        const appId = 'my-health-tracker-6a42c';
+        let db, auth, userId = null, chartInstance;
 
-        async function setupFirebase() {
-            if (!window.firebase || !firebaseConfig) {
-                console.error("Firebase resources not ready");
-                return;
-            }
+        function logDebug(msg) { document.getElementById('debugLog').innerText = msg; }
 
-            try {
-                const app = window.firebase.initializeApp(firebaseConfig);
-                db = window.firebase.getFirestore(app);
-                auth = window.firebase.getAuth(app);
+        async function init() {
+            if (!window.firebase) return;
+            const app = window.firebase.initializeApp(firebaseConfig);
+            db = window.firebase.getFirestore(app);
+            auth = window.firebase.getAuth(app);
 
-                const initAuth = async () => {
-                    try {
-                        if (initialAuthToken) {
-                            await window.firebase.signInWithCustomToken(auth, initialAuthToken);
-                        } else {
-                            await window.firebase.signInAnonymously(auth);
-                        }
-                    } catch (e) {
-                        console.error("Auth failed:", e);
-                        await window.firebase.signInAnonymously(auth);
-                    }
-                };
+            await window.firebase.signInAnonymously(auth);
+            window.firebase.onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    userId = user.uid;
+                    document.getElementById('displayUserId').innerText = userId;
+                    document.getElementById('authStatus').innerText = "ONLINE";
+                    document.getElementById('statusIndicator').className = "w-2 h-2 rounded-full bg-emerald-500";
+                    logDebug("Connected to Firebase.");
+                    startListeners();
+                }
+            });
+        }
 
-                await initAuth();
-
-                window.firebase.onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        document.getElementById('displayUserId').textContent = userId;
-                        document.getElementById('authStatus').textContent = "CONNECTED";
-                        document.getElementById('statusIndicator').className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse";
-                        isAuthReady = true;
-                        initListeners();
+        function startListeners() {
+            const today = new Date().toISOString().split('T')[0];
+            const mealsRef = window.firebase.collection(db, 'artifacts', appId, 'users', userId, 'meals');
+            window.firebase.onSnapshot(mealsRef, (snap) => {
+                let total = 0;
+                const items = [];
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.dateKey === today) {
+                        total += data.calories;
+                        items.push(data);
                     }
                 });
-            } catch (err) {
-                console.error("Firebase setup error:", err);
-            }
+                document.getElementById('dailyTotalCalories').innerText = total;
+                renderFeed(items);
+            });
+
+            const waterRef = window.firebase.collection(db, 'artifacts', appId, 'users', userId, 'water');
+            window.firebase.onSnapshot(waterRef, (snap) => {
+                let total = 0;
+                snap.forEach(doc => { if (doc.data().dateKey === today) total += doc.data().amount; });
+                document.getElementById('dailyWaterTotal').innerText = total;
+                document.getElementById('waterFill').style.height = Math.min((total/2500)*100, 100) + '%';
+            });
         }
 
         async function logWater(amount) {
-            if (!isAuthReady || !userId) return;
-            try {
-                const ref = window.firebase.collection(db, 'artifacts', appId, 'users', userId, 'water');
-                await window.firebase.addDoc(ref, {
-                    amount: Number(amount),
-                    dateKey: new Date().toISOString().split('T')[0],
-                    createdAt: window.firebase.serverTimestamp()
-                });
-            } catch (e) {
-                console.error("Log water error:", e);
-            }
-        }
-
-        async function resetWater() {
-            if (!confirm("Reset today's water intake? This feature currently only adds entries.")) return;
-        }
-
-        function initListeners() {
             if (!userId) return;
-            const todayKey = new Date().toISOString().split('T')[0];
-            const mealsRef = window.firebase.collection(db, 'artifacts', appId, 'users', userId, 'meals');
-            const waterRef = window.firebase.collection(db, 'artifacts', appId, 'users', userId, 'water');
-
-            window.firebase.onSnapshot(mealsRef, (snap) => {
-                let todayCals = 0;
-                const monthlyData = {};
-                const mealElements = [];
-
-                snap.forEach(doc => {
-                    const data = doc.data();
-                    const cals = Number(data.calories || 0);
-                    const dKey = data.dateKey || "unknown";
-                    monthlyData[dKey] = (monthlyData[dKey] || 0) + cals;
-                    
-                    if (dKey === todayKey) {
-                        todayCals += cals;
-                        mealElements.push({ ...data, id: doc.id });
-                    }
-                });
-
-                document.getElementById('dailyTotalCalories').textContent = todayCals.toLocaleString();
-                updateChart(monthlyData);
-                renderFeed(mealElements);
-            }, (err) => console.error("Meals snapshot error:", err));
-
-            window.firebase.onSnapshot(waterRef, (snap) => {
-                let todayWater = 0;
-                snap.forEach(doc => {
-                    const data = doc.data();
-                    if (data.dateKey === todayKey) {
-                        todayWater += Number(data.amount);
-                    }
-                });
-                document.getElementById('dailyWaterTotal').textContent = todayWater;
-                const percent = Math.min((todayWater / 2500) * 100, 100);
-                const fill = document.getElementById('waterFill');
-                if (fill) fill.style.height = percent + '%';
-            }, (err) => console.error("Water snapshot error:", err));
-        }
-
-        function renderFeed(items) {
-            const feed = document.getElementById('activityFeed');
-            items.sort((a, b) => {
-                const timeA = a.createdAt?.seconds || 0;
-                const timeB = b.createdAt?.seconds || 0;
-                return timeB - timeA;
+            await window.firebase.addDoc(window.firebase.collection(db, 'artifacts', appId, 'users', userId, 'water'), {
+                amount, dateKey: new Date().toISOString().split('T')[0], createdAt: window.firebase.serverTimestamp()
             });
-
-            if (items.length === 0) {
-                feed.innerHTML = '<p class="text-slate-400 italic text-sm text-center py-10">No meals logged today.</p>';
-                return;
-            }
-
-            feed.innerHTML = items.map(item => {
-                const timeStr = item.createdAt ? new Date(item.createdAt.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now';
-                return `
-                <div class="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-2xl border border-slate-100 dark:border-slate-600 transition hover:border-emerald-200 dark:hover:border-emerald-500/30">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <h3 class="font-bold text-slate-800 dark:text-slate-100">${item.name}</h3>
-                            <p class="text-[10px] text-slate-400 uppercase font-bold tracking-widest mt-1">Logged ${timeStr}</p>
-                        </div>
-                        <span class="text-emerald-600 dark:text-emerald-400 font-black">${item.calories} kcal</span>
-                    </div>
-                </div>
-            `}).join('');
         }
 
         async function handleMealAnalysis() {
-            const nameInput = document.getElementById('mealNameInput');
-            const imgInput = document.getElementById('imageInput');
-            const file = imgInput.files[0];
-            const name = nameInput.value.trim();
+            const name = document.getElementById('mealNameInput').value;
+            const file = document.getElementById('imageInput').files[0];
+            if (!name || !file) return alert("Enter meal name and photo.");
 
-            if (!file || !name) return;
-            if (!isAuthReady) return;
-
-            const btn = document.getElementById('submitButton');
-            const loader = document.getElementById('loadingIndicator');
-            const respDiv = document.getElementById('aiResponse');
-            const container = document.getElementById('outputContainer');
-
-            container.classList.remove('hidden');
-            loader.classList.remove('hidden');
-            respDiv.innerHTML = '';
-            btn.disabled = true;
+            document.getElementById('outputContainer').classList.remove('hidden');
+            document.getElementById('loadingIndicator').classList.remove('hidden');
 
             const reader = new FileReader();
             reader.onload = async (e) => {
+                const base64 = e.target.result.split(',')[1];
                 try {
-                    const base64 = e.target.result.split(',')[1];
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                         method: 'POST',
-                        body: JSON.stringify({
-                            contents: [{
-                                parts: [
-                                    { text: "Estimate calories for this meal. Be concise. Use markdown for the breakdown. Required format for final total: [CALORIES: XXX]" },
-                                    { inlineData: { mimeType: file.type, data: base64 } }
-                                ]
-                            }]
-                        })
+                        body: JSON.stringify({ contents: [{ parts: [
+                            { text: "Estimate calories for this meal. Return exactly: [CALORIES: XXX]" },
+                            { inlineData: { mimeType: file.type, data: base64 } }
+                        ]}]})
                     });
-
-                    const res = await response.json();
-                    const text = res.candidates?.[0]?.content?.parts?.[0]?.text || "Could not analyze image.";
-                    const calsMatch = text.match(/\[CALORIES:\s*(\d+)\]/i);
-                    const cals = calsMatch ? parseInt(calsMatch[1]) : 0;
-
-                    respDiv.innerHTML = typeof marked !== 'undefined' ? marked.parse(text) : text;
+                    const data = await res.json();
+                    const text = data.candidates[0].content.parts[0].text;
+                    const cals = parseInt(text.match(/\[CALORIES:\s*(\d+)\]/)[1]);
                     
-                    const mealsRef = window.firebase.collection(db, 'artifacts', appId, 'users', userId, 'meals');
-                    await window.firebase.addDoc(mealsRef, {
-                        name,
-                        calories: cals,
-                        aiResponse: text,
-                        dateKey: new Date().toISOString().split('T')[0],
-                        createdAt: window.firebase.serverTimestamp()
+                    document.getElementById('aiResponse').innerHTML = marked.parse(text);
+                    await window.firebase.addDoc(window.firebase.collection(db, 'artifacts', appId, 'users', userId, 'meals'), {
+                        name, calories: cals, dateKey: new Date().toISOString().split('T')[0], createdAt: window.firebase.serverTimestamp()
                     });
-
-                    nameInput.value = '';
-                    imgInput.value = '';
-                } catch (err) {
-                    console.error(err);
-                    respDiv.innerHTML = `<span class="text-red-500">Error: ${err.message}</span>`;
-                } finally {
-                    loader.classList.add('hidden');
-                    btn.disabled = false;
-                }
+                    logDebug("Meal Logged!");
+                } catch (err) { logDebug("AI Error: " + err.message); }
+                document.getElementById('loadingIndicator').classList.add('hidden');
             };
             reader.readAsDataURL(file);
         }
 
-        function updateChart(dataMap) {
-            // Check if Chart library is loaded
-            if (typeof Chart === 'undefined') {
-                console.warn('Chart.js not loaded yet. Retrying...');
-                setTimeout(() => updateChart(dataMap), 500);
-                return;
-            }
-
-            const canvas = document.getElementById('monthlyCalorieChart');
-            if (!canvas) return;
-            
-            const labels = [];
-            const values = [];
-            for (let i = 13; i >= 0; i--) {
-                const d = new Date();
-                d.setDate(d.getDate() - i);
-                const k = d.toISOString().split('T')[0];
-                labels.push(d.toLocaleDateString([], { month: 'short', day: 'numeric' }));
-                values.push(dataMap[k] || 0);
-            }
-
-            if (chartInstance) chartInstance.destroy();
-            chartInstance = new Chart(canvas.getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels,
-                    datasets: [{
-                        label: 'Calories',
-                        data: values,
-                        backgroundColor: '#10b981',
-                        borderRadius: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
-                        x: { grid: { display: false } }
-                    }
-                }
-            });
+        function renderFeed(items) {
+            const feed = document.getElementById('activityFeed');
+            feed.innerHTML = items.map(i => `<div class="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg flex justify-between"><b>${i.name}</b><span>${i.calories} kcal</span></div>`).join('');
         }
 
-        function toggleTheme() {
-            document.documentElement.classList.toggle('dark');
-            const isDark = document.documentElement.classList.contains('dark');
-            document.getElementById('themeToggleIcon').innerHTML = isDark ? '🌙' : '☀️';
-            if (chartInstance) {
-                // Get the existing data to redraw the chart with correct theme colors if needed
-                updateChart(chartInstance.data.datasets[0].data.reduce((acc, val, idx) => {
-                   const d = new Date();
-                   d.setDate(d.getDate() - (13 - idx));
-                   acc[d.toISOString().split('T')[0]] = val;
-                   return acc;
-                }, {}));
-            }
-        }
-
-        window.onload = setupFirebase;
+        window.onload = init;
     </script>
 </body>
 </html>
