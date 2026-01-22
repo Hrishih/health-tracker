@@ -1,0 +1,21 @@
+{
+    "short_name": "HealthTracker",
+    "name": "AI Calorie & Water Tracker",
+    "icons": [
+      {
+        "src": "[https://cdn-icons-png.flaticon.com/512/192/192451.png](https://cdn-icons-png.flaticon.com/512/192/192451.png)",
+        "type": "image/png",
+        "sizes": "192x192"
+      },
+      {
+        "src": "[https://cdn-icons-png.flaticon.com/512/512/512165.png](https://cdn-icons-png.flaticon.com/512/512/512165.png)",
+        "type": "image/png",
+        "sizes": "512x512"
+      }
+    ],
+    "start_url": "./index.html",
+    "background_color": "#f8fafc",
+    "display": "standalone",
+    "scope": "./",
+    "theme_color": "#10b981"
+  }
