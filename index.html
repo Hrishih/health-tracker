@@ -131,10 +131,25 @@
     </div>
 
     <script>
-        // CONFIG
-        const apiKey = ""; // EMPTY STRING FOR PREVIEW ENVIRONMENT (Provided at runtime)
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // --- PUBLIC HOSTING CONFIGURATION ---
+        // REPLACE THESE WITH YOUR ACTUAL CREDENTIALS BEFORE HOSTING
+        
+        // 1. Your Gemini API Key from Google AI Studio
+        const apiKey = "YOUR_GEMINI_API_KEY_HERE"; 
+
+        // 2. Your Firebase Project ID
+        const appId = 'YOUR_FIREBASE_PROJECT_ID'; 
+
+        // 3. Your full Firebase Config object from Project Settings
+        const firebaseConfig = {
+            apiKey: "YOUR_FIREBASE_API_KEY",
+            authDomain: "your-project.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "123456789012",
+            appId: "1:123456789012:web:abcdef1234567890"
+        };
+        // -------------------------------------
 
         let db, auth, userId = null, chartInstance = null;
 
@@ -163,6 +178,12 @@
 
         async function init() {
             try {
+                // Check if user has actually updated the placeholder config
+                if (firebaseConfig.apiKey === "YOUR_FIREBASE_API_KEY") {
+                    logDebug("SYSTEM: Credentials required. Edit the script block to add your API keys.");
+                    return;
+                }
+
                 const app = window.firebase.initializeApp(firebaseConfig);
                 db = window.firebase.getFirestore(app);
                 auth = window.firebase.getAuth(app);
@@ -171,11 +192,8 @@
 
                 // Auth Logic (Rule 3)
                 const initAuth = async () => {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await window.firebase.signInWithCustomToken(auth, __initial_auth_token);
-                    } else {
-                        await window.firebase.signInAnonymously(auth);
-                    }
+                    // For public hosting, we default to Anonymous Auth
+                    await window.firebase.signInAnonymously(auth);
                 };
                 initAuth();
 
@@ -240,6 +258,11 @@
 
         async function handleMealAnalysis() {
             if (!userId) return logDebug("User not authenticated.");
+            if (!apiKey || apiKey === "YOUR_GEMINI_API_KEY_HERE") {
+                alert("Please add your Gemini API Key to the code configuration.");
+                return;
+            }
+
             const nameInput = document.getElementById('mealNameInput');
             const name = nameInput.value.trim();
             const file = document.getElementById('imageInput').files[0];
@@ -258,9 +281,6 @@
             try {
                 const optimizedBase64 = await compressImage(file);
                 logDebug("AI analyzing...");
-                
-                let retryCount = 0;
-                let responseText = "";
                 
                 // Exponential Backoff implementation
                 const fetchWithRetry = async (attempt) => {
@@ -291,7 +311,7 @@
                     }
                 };
 
-                responseText = await fetchWithRetry(0);
+                const responseText = await fetchWithRetry(0);
                 
                 if (!responseText) throw new Error("No response from AI");
 
@@ -313,7 +333,7 @@
                 document.getElementById('fileStatus').innerText = '📸 Tap to Take Photo';
             } catch (err) {
                 logDebug("Error: " + err.message);
-                document.getElementById('aiResponse').innerHTML = `<p class="text-red-500 font-bold">Analysis Error: ${err.message}</p><p class="mt-2">Try refreshing or using a smaller image.</p>`;
+                document.getElementById('aiResponse').innerHTML = `<p class="text-red-500 font-bold">Analysis Error: ${err.message}</p><p class="mt-2 text-xs">Verify your API key and connection.</p>`;
             } finally {
                 btn.disabled = false;
                 document.getElementById('loadingIndicator').classList.add('hidden');
